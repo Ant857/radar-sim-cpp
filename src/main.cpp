@@ -2,6 +2,7 @@
 #include "chirp.h"
 #include "simulate.h"
 #include "matched_filter.h"
+#include "doppler.h"
 #include <cstdio>
 #include <complex>
 #include <vector>
@@ -62,6 +63,48 @@ int main() {
  
         std::printf("Target %zu (%.0f m): raw |amp| = %.2e, compressed |amp| = %.2e\n",
                     t + 1, params.targets[t].range_m, raw_amp, comp_amp);
+    }
+    
+    // Doppler processing
+    auto rdm = doppler_process(compressed, params);
+    std::printf("\n=== Range-Doppler Map ===\n");
+    std::printf("RDM size: %ld x %ld\n", rdm.rows(), rdm.cols());
+ 
+    // Find peak in RDM for each target
+    std::vector<double> range_axis(params.samples_per_pulse);
+    for (int i = 0; i < params.samples_per_pulse; ++i) {
+        range_axis[i] = i * RadarParams::c / (2.0 * params.fs);
+    }
+ 
+    std::vector<double> vel_axis(params.num_pulses);
+    for (int j = 0; j < params.num_pulses; ++j) {
+        vel_axis[j] = -params.max_velocity
+            + j * 2.0 * params.max_velocity / (params.num_pulses - 1);
+    }
+ 
+    // Search for peaks near each true target location
+    std::printf("\n=== Target Detection Check ===\n");
+    for (size_t t = 0; t < params.targets.size(); ++t) {
+        double tgt_range = params.targets[t].range_m;
+        double tgt_vel   = params.targets[t].velocity_mps;
+        double best_power = 0;
+        int best_r = 0, best_d = 0;
+ 
+        for (int i = 0; i < params.samples_per_pulse; ++i) {
+            if (std::abs(range_axis[i] - tgt_range) > 500) continue;
+            for (int j = 0; j < params.num_pulses; ++j) {
+                double pwr = std::norm(rdm(i, j));  // |z|^2
+                if (pwr > best_power) {
+                    best_power = pwr;
+                    best_r = i;
+                    best_d = j;
+                }
+            }
+        }
+ 
+        std::printf("Target %zu: true (%.0f m, %.1f m/s) → peak at (%.0f m, %.1f m/s), power = %.2e\n",
+                    t + 1, tgt_range, tgt_vel,
+                    range_axis[best_r], vel_axis[best_d], best_power);
     }
  
     return 0;
