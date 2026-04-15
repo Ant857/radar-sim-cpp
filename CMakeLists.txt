@@ -15,6 +15,7 @@ add_executable(radar_sim
     src/radar_params.cpp
     src/chirp.cpp
     src/simulate.cpp
+    src/matched_filter.cpp
 )
 
 target_include_directories(radar_sim PRIVATE

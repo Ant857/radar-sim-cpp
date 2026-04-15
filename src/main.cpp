@@ -1,6 +1,7 @@
 #include "radar_params.h"
 #include "chirp.h"
 #include "simulate.h"
+#include "matched_filter.h"
 #include <cstdio>
 #include <complex>
 #include <vector>
@@ -46,6 +47,22 @@ int main() {
         noise_sum += std::abs(rx_signal(i, 0));
     }
     std::printf("Avg noise floor: %.2e\n", noise_sum / n_samples);
+    
+    // Matched filter, range compression
+    auto compressed = matched_filter(rx_signal, pulse, params);
+    std::printf("\n=== After Matched Filtering ===\n");
+ 
+    // Find peaks in first pulse, these should correspond to target ranges
+    for (size_t t = 0; t < params.targets.size(); ++t) {
+        int delay = static_cast<int>(std::round(
+            2.0 * params.targets[t].range_m / RadarParams::c * params.fs));
+ 
+        double raw_amp = std::abs(rx_signal(delay, 0));
+        double comp_amp = std::abs(compressed(delay, 0));
+ 
+        std::printf("Target %zu (%.0f m): raw |amp| = %.2e, compressed |amp| = %.2e\n",
+                    t + 1, params.targets[t].range_m, raw_amp, comp_amp);
+    }
  
     return 0;
 }
