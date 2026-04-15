@@ -13,11 +13,6 @@ pkg_check_modules(FFTW3 REQUIRED fftw3)
 add_executable(radar_sim
     src/main.cpp
     src/radar_params.cpp
-    src/chirp.cpp
-    src/simulate.cpp
-    src/matched_filter.cpp
-    src/doppler.cpp
-    src/cfar.cpp
 )
 
 target_include_directories(radar_sim PRIVATE
