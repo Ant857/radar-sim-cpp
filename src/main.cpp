@@ -3,6 +3,7 @@
 #include "simulate.h"
 #include "matched_filter.h"
 #include "doppler.h"
+#include "cfar.h"
 #include <cstdio>
 #include <complex>
 #include <vector>
@@ -17,60 +18,26 @@ int main() {
     // Generate chirp
     auto pulse = generate_chirp(params);
     std::printf("\n=== Chirp Waveform ===\n");
-    std::printf("Pulse length:    %zu samples\n", pulse.size());
-    std::printf("Chirp rate:      %.2e Hz/s\n", params.bw / params.pulse_width);
-    std::printf("First sample:    (%.4f, %.4f)\n", pulse.front().real(), pulse.front().imag());
-    std::printf("Last sample:     (%.4f, %.4f)\n", pulse.back().real(), pulse.back().imag());
+    std::printf("Pulse length: %zu samples\n", pulse.size());
  
-    // Verify unit magnitude, all samples should have |pulse| = 1
-    double mag = std::abs(pulse[pulse.size() / 2]);
-    std::printf("Mid-pulse |mag|: %.6f (should be 1.0)\n", mag);
-    
     // Simulate received signal
     auto rx_signal = simulate_returns(pulse, params);
     std::printf("\n=== Received Signal ===\n");
-    std::printf("Matrix size:     %ld rows x %ld cols\n",
-			rx_signal.rows(), rx_signal.cols());
+    std::printf("Matrix size:  %ld x %ld\n", rx_signal.rows(), rx_signal.cols());
  
-    // Show peak amplitude per target
-    // Targets should create visible peaks at their delay positions
-    for (size_t t = 0; t < params.targets.size(); ++t) {
-        int delay = static_cast<int>(std::round(2.0 * params.targets[t].range_m / RadarParams::c * params.fs));
-        double peak = std::abs(rx_signal(delay, 0));
-        std::printf("Target %zu (range %.0f m): sample %d, |amplitude| = %.2e\n",
-        		t + 1, params.targets[t].range_m, delay, peak);
-    }
- 
-    // Noise floor estimate, from last 100 samples of pulse 1
-    double noise_sum = 0;
-    int n_samples = 100;
-    for (int i = rx_signal.rows() - n_samples; i < rx_signal.rows(); ++i) {
-        noise_sum += std::abs(rx_signal(i, 0));
-    }
-    std::printf("Avg noise floor: %.2e\n", noise_sum / n_samples);
-    
-    // Matched filter, range compression
+    // Matched filter
     auto compressed = matched_filter(rx_signal, pulse, params);
-    std::printf("\n=== After Matched Filtering ===\n");
+    std::printf("\n=== Matched Filter Complete ===\n");
  
-    // Find peaks in first pulse, these should correspond to target ranges
-    for (size_t t = 0; t < params.targets.size(); ++t) {
-        int delay = static_cast<int>(std::round(
-            2.0 * params.targets[t].range_m / RadarParams::c * params.fs));
- 
-        double raw_amp = std::abs(rx_signal(delay, 0));
-        double comp_amp = std::abs(compressed(delay, 0));
- 
-        std::printf("Target %zu (%.0f m): raw |amp| = %.2e, compressed |amp| = %.2e\n",
-                    t + 1, params.targets[t].range_m, raw_amp, comp_amp);
-    }
-    
     // Doppler processing
     auto rdm = doppler_process(compressed, params);
     std::printf("\n=== Range-Doppler Map ===\n");
     std::printf("RDM size: %ld x %ld\n", rdm.rows(), rdm.cols());
  
-    // Find peak in RDM for each target
+    // CFAR detection
+    auto detections = cfar_detect(rdm, params);
+ 
+    // Build axis vectors for display
     std::vector<double> range_axis(params.samples_per_pulse);
     for (int i = 0; i < params.samples_per_pulse; ++i) {
         range_axis[i] = i * RadarParams::c / (2.0 * params.fs);
@@ -82,29 +49,24 @@ int main() {
             + j * 2.0 * params.max_velocity / (params.num_pulses - 1);
     }
  
-    // Search for peaks near each true target location
-    std::printf("\n=== Target Detection Check ===\n");
-    for (size_t t = 0; t < params.targets.size(); ++t) {
-        double tgt_range = params.targets[t].range_m;
-        double tgt_vel   = params.targets[t].velocity_mps;
-        double best_power = 0;
-        int best_r = 0, best_d = 0;
- 
-        for (int i = 0; i < params.samples_per_pulse; ++i) {
-            if (std::abs(range_axis[i] - tgt_range) > 500) continue;
-            for (int j = 0; j < params.num_pulses; ++j) {
-                double pwr = std::norm(rdm(i, j));  // |z|^2
-                if (pwr > best_power) {
-                    best_power = pwr;
-                    best_r = i;
-                    best_d = j;
-                }
-            }
+    // Print detections
+    std::printf("\n=== CFAR Detections ===\n");
+    if (detections.empty()) {
+        std::printf("No targets detected. Try lowering cfar_alpha.\n");
+    } else {
+        for (size_t d = 0; d < detections.size(); ++d) {
+            double r = range_axis[detections[d].range_idx];
+            double v = vel_axis[detections[d].doppler_idx];
+            std::printf("Detection %zu: Range = %.0f m, Velocity = %.1f m/s, Power = %.2e\n",
+                        d + 1, r, v, detections[d].power);
         }
+    }
  
-        std::printf("Target %zu: true (%.0f m, %.1f m/s) → peak at (%.0f m, %.1f m/s), power = %.2e\n",
-                    t + 1, tgt_range, tgt_vel,
-                    range_axis[best_r], vel_axis[best_d], best_power);
+    // Print ground truth for comparison
+    std::printf("\n=== Ground Truth ===\n");
+    for (size_t t = 0; t < params.targets.size(); ++t) {
+        std::printf("Target %zu:    Range = %.0f m, Velocity = %.1f m/s\n",
+                    t + 1, params.targets[t].range_m, params.targets[t].velocity_mps);
     }
  
     return 0;
