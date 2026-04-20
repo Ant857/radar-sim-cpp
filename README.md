@@ -2,6 +2,10 @@
 
 A C++ implementation of a pulse-Doppler radar signal processing chain, ported from MATLAB/Octave.
 
+## Results
+
+![Radar Simulation Results](images/radar_results.png)
+
 ## Signal Processing Pipeline
 
 1. **Chirp Generation** — Linear frequency modulated (LFM) transmit waveform
@@ -28,11 +32,13 @@ A C++ implementation of a pulse-Doppler radar signal processing chain, ported fr
 - CMake 3.16+
 - [Eigen3](https://eigen.tuxfamily.org/) — matrix operations
 - [FFTW3](https://www.fftw.org/) — fast Fourier transforms
+- Python 3 with numpy and matplotlib (for plotting)
 
 ## Build
 
 ```bash
 sudo apt install build-essential cmake libfftw3-dev libeigen3-dev
+pip install numpy matplotlib
 
 mkdir build && cd build
 cmake ..
@@ -42,8 +48,17 @@ make
 ## Run
 
 ```bash
+# Create the output directory for CSV data
+mkdir -p output
+
+# Run the simulation
 ./build/radar_sim
+
+# Generate the plot
+python3 plot_results.py output
 ```
+
+The simulator writes CSV files to the `output/` directory, which the Python script reads to produce the plot.
 
 ## License
 
