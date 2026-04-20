@@ -4,6 +4,7 @@
 #include "matched_filter.h"
 #include "doppler.h"
 #include "cfar.h"
+#include "export_csv.h"
 #include <cstdio>
 #include <complex>
 #include <vector>
@@ -68,6 +69,12 @@ int main() {
         std::printf("Target %zu:    Range = %.0f m, Velocity = %.1f m/s\n",
                     t + 1, params.targets[t].range_m, params.targets[t].velocity_mps);
     }
+ 
+ 	// Export data to CSV for plotting using matplotlib
+ 	std::printf("\n=== Exporting CSV Data ===\n");
+    export_csv(rx_signal, compressed, rdm, detections, params, "output");
+ 
+    std::printf("\nRun: python3 plot_results.py output\n");
  
     return 0;
 }
