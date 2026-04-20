@@ -18,6 +18,7 @@ add_executable(radar_sim
     src/matched_filter.cpp
     src/doppler.cpp
     src/cfar.cpp
+    src/export_csv.cpp
 )
 
 target_include_directories(radar_sim PRIVATE
